@@ -23,6 +23,7 @@ if __name__ == '__main__':
     ss=SelectiveSearch()
     rects=ss(img)
     print(rects)
+    print(rects.shape)
     print("tlt len:",len(rects))
     for i,rect in enumerate(rects):
         if i>20:

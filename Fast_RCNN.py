@@ -1,9 +1,34 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
+from torchvision.ops import roi_pool
+from selective_search import SelectiveSearch
 
-class AlexNet(nn.Module):
+class Fast_RCNN(nn.Module):
 
-    def __init__(self, num_classes: int = 1000) -> None:
-        model = models.alexnet(pretrained=True).features
-        self.avgpool = nn.AdaptiveAvgPool2d((6, 6))
+    def __init__(self,class_num=1):
+        super(Fast_RCNN, self).__init__()
+        self.feature = models.alexnet(pretrained=True).features
+        self.ss=SelectiveSearch()
+        self.FC=nn.Sequential(
+            nn.Linear(256*7*7,4096),
+            nn.Linear(4096,4096)
+        )
+        self.bbs=nn.Linear(4096,(class_num+1)*4)
+        self.cls=nn.Linear(4096,class_num+1)
+
+    def forward(self,X):
+        """
+        X
+        """
+        x=self.feature(X)
+        bbs=self.ss(X)
+        rois=roi_pool(x,bbs,7,13/227)
+        #Tensor[K, C, output_size[0], output_size[1]]
+        rois = torch.flatten(rois, 1)
+        #rois = [K,256*7*7]
+        x=self.FC(rois)
+        #x = [K,4096]
+        cls = self.cls(x)
+        bbs = self.bbs(x)
+        return cls,bbs
