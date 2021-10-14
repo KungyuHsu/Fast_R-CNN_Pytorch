@@ -7,7 +7,8 @@ import torchvision.transforms as transforms
 import torch.optim as optim
 from data.dataset import FastDataset
 from data.finetune_sample import CustomBatchSampler
-
+import time
+import copy
 
 def load_data(data_root_dir):
     # 图像预处理
@@ -25,15 +26,12 @@ def load_data(data_root_dir):
         data_dir = os.path.join(data_root_dir, name)
         #定义Dataset
         data_set = FastDataset(data_dir, transform=transform)
-        #定义sampler
-        data_sampler = CustomBatchSampler(data_set.get_positive_num(), data_set.get_negative_num(), 32, 96)
         #定义加载器
-        data_loader = DataLoader(data_set, batch_size=128, sampler=data_sampler, num_workers=8, drop_last=True)
+        data_loader = DataLoader(data_set, batch_size=2, num_workers=8, drop_last=True)
 
         data_loaders[name] = data_loader
-        data_sizes[name] = data_sampler.__len__()
 
-    return data_loaders, data_sizes
+    return data_loaders
 
 def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epochs=25, device=None):
     since = time.time()
@@ -86,8 +84,8 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
                 torch.cuda.empty_cache()
                 lr_scheduler.step()
                 torch.save(model.state_dict(), 'alexnet_car.pth')
-            epoch_loss = running_loss / data_sizes[phase]
-            epoch_acc = running_corrects.double() / data_sizes[phase]
+            epoch_loss = running_loss / 128
+            epoch_acc = running_corrects.double() / 128
             torch.cuda.empty_cache()
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -133,7 +131,7 @@ def mutyloss(outputs, labels):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = Fast_RCNN()
-    data_loaders, data_sizes = load_data(r'.\data\funetune')
+    data_loaders = load_data(r'.\data\funetune')
 
     model = model.to(device)
     # 定义交叉损失

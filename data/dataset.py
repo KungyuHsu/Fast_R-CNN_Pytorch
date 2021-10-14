@@ -1,193 +1,123 @@
-
-import numpy  as np
 import os
 import cv2
-from PIL import Image
+import numpy as np
+import torch
+import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
 
-from util import parse_car_csv
+import util
 
 
 class FastDataset(Dataset):
 
     def __init__(self, root_dir, transform=None):
-        samples = parse_car_csv(root_dir)
-
-        jpeg_images = list()
-        positive_list = list()
-        negative_list = list()
-        for idx in range(len(samples)):
-            sample_name = samples[idx]
-            jpeg_images.append(cv2.imread(os.path.join(root_dir, 'JPEGImages', sample_name + ".jpg")))
-
-            positive_annotation_path = os.path.join(root_dir, 'Annotations', sample_name + '_1.csv')
-            positive_annotations = np.loadtxt(positive_annotation_path, dtype=np.int, delimiter=' ')
-            # 考虑csv文件为空或者仅包含单个标注框
-            if len(positive_annotations.shape) == 1:
-                # 单个标注框坐标
-                if positive_annotations.shape[0] == 4:
-                    positive_dict = dict()
-
-                    positive_dict['rect'] = positive_annotations
-                    positive_dict['image_id'] = idx
-                    # positive_dict['image_name'] = sample_name
-
-                    positive_list.append(positive_dict)
-            else:
-                for positive_annotation in positive_annotations:
-                    positive_dict = dict()
-
-                    positive_dict['rect'] = positive_annotation
-                    positive_dict['image_id'] = idx
-                    # positive_dict['image_name'] = sample_name
-
-                    positive_list.append(positive_dict)
-
-            negative_annotation_path = os.path.join(root_dir, 'Annotations', sample_name + '_0.csv')
-            negative_annotations = np.loadtxt(negative_annotation_path, dtype=np.int, delimiter=' ')
-            # 考虑csv文件为空或者仅包含单个标注框
-            if len(negative_annotations.shape) == 1:
-                # 单个标注框坐标
-                if negative_annotations.shape[0] == 4:
-                    negative_dict = dict()
-
-                    negative_dict['rect'] = negative_annotations
-                    negative_dict['image_id'] = idx
-                    # negative_dict['image_name'] = sample_name
-
-                    negative_list.append(negative_dict)
-            else:
-                for negative_annotation in negative_annotations:
-                    negative_dict = dict()
-
-                    negative_dict['rect'] = negative_annotation
-                    negative_dict['image_id'] = idx
-                    # negative_dict['image_name'] = sample_name
-
-                    negative_list.append(negative_dict)
-
+        super(FastDataset, self).__init__()
         self.transform = transform
-        self.jpeg_images = jpeg_images
-        self.positive_list = positive_list
-        self.negative_list = negative_list
+
+        samples = util.parse_car_csv(root_dir)
+        jpeg_list = list()
+        # 保存{'image_id': ?, 'positive': ?, 'bndbox': ?}
+        box_list = list()
+        for i in range(len(samples)):
+            sample_name = samples[i]
+
+            jpeg_path = os.path.join(root_dir, 'JPEGImages', sample_name + '.jpg')
+            Annatations = os.path.join(root_dir, 'Annotations')
+            bndbox_path = os.path.join(Annatations, sample_name+"_0" + '.csv')
+            positive_path = os.path.join(Annatations, sample_name+ "_1" '.csv')
+
+            jpeg_list.append(cv2.imread(jpeg_path))
+            bndboxes = np.loadtxt(bndbox_path, dtype=np.int, delimiter=' ')
+            positives = np.loadtxt(positive_path, dtype=np.int, delimiter=' ')
+
+            for positive in positives:
+                bndbox = self.get_bndbox(bndboxes, positive)
+                box_list.append({'image_id': i, 'posi': positive, 'neg': bndbox})
+
+        self.jpeg_list = jpeg_list
+        self.box_list = box_list
 
     def __getitem__(self, index: int):
-        # 定位下标所属图像
-        if index < len(self.positive_list):
-            # 正样本
-            target = 1
-            positive_dict = self.positive_list[index]
 
-            rect = positive_dict['rect']
-            image_id = positive_dict['image_id']
+        box_dict = self.box_list[index]
+        image_id = box_dict['image_id']
+        positive = box_dict['posi']
+        neg = box_dict['neg']
 
-            image = self.jpeg_images[image_id]
-        else:
-            # 负样本
-            target = 0
-            idx = index - len(self.positive_list)
-            negative_dict = self.negative_list[idx]
-
-            rect = negative_dict['rect']
-
-            image_id = negative_dict['image_id']
-            image = self.jpeg_images[image_id]
+        # 获取预测图像
+        jpeg_img = self.jpeg_list[image_id]
+        image = jpeg_img
 
         if self.transform:
             image = self.transform(image)
 
-        return image,rect, target
+        return image, positive , neg
+
+    def __len__(self):
+        return len(self.box_list)
+
+    def get_bndbox(self, bndboxes, positive):
+        """
+        返回和positive的IoU最大的标注边界框
+        :param bndboxes: 大小为[N, 4]或者[4]
+        :param positive: 大小为[4]
+        :return: [4]
+        """
+
+        if len(bndboxes.shape) == 1:
+            # 只有一个标注边界框，直接返回即可
+            return bndboxes
+        else:
+            scores = util.iou(positive, bndboxes)
+            return bndboxes[np.argmax(scores)]
+
+
+def test():
     """
-    image:原图
-    rect：标注框，原论文中为 正样本IOU>0.5 负样本[0，0.5)
-    targer:正负样本标记
+    创建数据集类实例
     """
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((227, 227)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
 
-    def __len__(self) -> int:
-        return len(self.positive_list) + len(self.negative_list)
+    data_root_dir = '../../data/bbox_regression'
+    data_set = BBoxRegressionDataset(data_root_dir, transform=transform)
 
-    def get_transform(self):
-        return self.transform
-
-    def get_jpeg_images(self) -> list:
-        return self.jpeg_images
-
-    def get_positive_num(self) -> int:
-        return len(self.positive_list)
-
-    def get_negative_num(self) -> int:
-        return len(self.negative_list)
-
-    def get_positives(self) -> list:
-        return self.positive_list
-
-    def get_negatives(self) -> list:
-        return self.negative_list
-    # 用于hard negative mining
-    # 替换负样本
-    def set_negative_list(self, negative_list):
-        self.negative_list = negative_list
-
-
-def test(idx):
-    root_dir = '../../data/classifier_car/val'
-    train_data_set = CustomClassifierDataset(root_dir)
-
-    print('positive num: %d' % train_data_set.get_positive_num())
-    print('negative num: %d' % train_data_set.get_negative_num())
-    print('total num: %d' % train_data_set.__len__())
-
-    # 测试id=3/66516/66517/530856
-    image, target, cache_dict = train_data_set.__getitem__(idx)
-    print('target: %d' % target)
-    print('dict: ' + str(cache_dict))
-
-    image = Image.fromarray(image)
-    print(image)
-    print(type(image))
-
-    # cv2.imshow('image', image)
-    # cv2.waitKey(0)
+    print(data_set.__len__())
+    image, target = data_set.__getitem__(10)
+    print(image.shape)
+    print(target)
+    print(target.dtype)
 
 
 def test2():
-    root_dir = '../../data/classifier_car/train'
+    """
+    测试DataLoader使用
+    """
     transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.Resize((227, 227)),
+        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
-    train_data_set = CustomClassifierDataset(root_dir, transform=transform)
-    image, target, cache_dict = train_data_set.__getitem__(230856)
-    print('target: %d' % target)
-    print('dict: ' + str(cache_dict))
-    print('image.shape: ' + str(image.shape))
+    data_root_dir = '../../data/bbox_regression'
+    data_set = BBoxRegressionDataset(data_root_dir, transform=transform)
+    data_loader = DataLoader(data_set, batch_size=128, shuffle=True, num_workers=8)
 
-
-def test3():
-    root_dir = '../../data/classifier_car/train'
-    transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize((227, 227)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-
-    train_data_set = CustomClassifierDataset(root_dir, transform=transform)
-    data_loader = DataLoader(train_data_set, batch_size=128, num_workers=8, drop_last=True)
-
-    inputs, targets, cache_dicts = next(data_loader.__iter__())
-    print(targets)
-    print(inputs.shape)
+    items = next(data_loader.__iter__())
+    datas, targets = items
+    print(datas.shape)
+    print(targets.shape)
+    print(targets.dtype)
 
 
 if __name__ == '__main__':
-    # test(159622)
-    # test(4051)
-    test(24768)
+    test()
     # test2()
-    # test3()
