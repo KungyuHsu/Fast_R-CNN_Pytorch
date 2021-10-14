@@ -35,7 +35,7 @@ def get_list(src_xml,src_jpg):
     positive_list=[]
     negative_list=[]
     #分类判断
-    for i,iou in tqdm(enumerate(iou_list)):
+    for i,iou in enumerate(iou_list):
         #获取坐标、计算大小
         xmin,ymin,xmax,ymax=rects[i]
         size=(xmax-xmin)*(ymax-ymin)
@@ -72,7 +72,7 @@ if __name__ == '__main__':
         car = []
         #将每个图片输入到SelectiveSearch中
         #将IOU>0.5设置为正样本
-        for i,sample in tqdm(enumerate(samples)):
+        for i,sample in enumerate(samples):
             since = time.time()
             src_xml=os.path.join(src_annotations,sample+".xml")
             src_jpg=os.path.join(src_img,sample+".jpg")
@@ -80,7 +80,7 @@ if __name__ == '__main__':
             positive_list,negative_list = get_list(src_xml,src_jpg)
 
             if len(positive_list)==0:
-#                print("pass:",i)
+                print("pass:",i)
                 continue
             car.append(sample)
             positive_number+=len(positive_list)
@@ -95,7 +95,7 @@ if __name__ == '__main__':
             np.savetxt(dst_annotation_positive_path, np.array(positive_list), fmt='%d', delimiter=' ')
             np.savetxt(dst_annotation_negative_path, np.array(negative_list), fmt='%d', delimiter=' ')
             time_elapsed = time.time() - since
-#            print('{}parse {}.png in {:.0f}m {:.0f}s process: [{}/{}] {:.2f}%'.format(name,sample, time_elapsed // 60, time_elapsed % 60,i,tlt,(i/tlt)*100))
+            print('{}parse {}.png in {:.0f}m {:.0f}s process: [{}/{}] {:.2f}%'.format(name,sample, time_elapsed // 60, time_elapsed % 60,i,tlt,(i/tlt)*100))
         #保存提取出来的编号列表
         np.savetxt(dst_csv, np.asarray(car),fmt='%s',delimiter=" ")
 
