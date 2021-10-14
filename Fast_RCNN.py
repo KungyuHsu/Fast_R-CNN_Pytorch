@@ -17,12 +17,11 @@ class Fast_RCNN(nn.Module):
         self.bbs=nn.Linear(4096,(class_num+1)*4)
         self.cls=nn.Linear(4096,class_num+1)
 
-    def forward(self,X):
+    def forward(self,X,bbs):
         """
         X
         """
         x=self.feature(X)
-        bbs=self.ss(X)
         rois=roi_pool(x,bbs,7,13/227)
         #Tensor[K, C, output_size[0], output_size[1]]
         rois = torch.flatten(rois, 1)
@@ -30,5 +29,9 @@ class Fast_RCNN(nn.Module):
         x=self.FC(rois)
         #x = [K,4096]
         cls = self.cls(x)
-        bbs = self.bbs(x)
+        bbs = self.bbs(x).reshape([-1,4])
         return cls,bbs
+    """
+    cls:分类情况 
+    bbs:回归框
+    """

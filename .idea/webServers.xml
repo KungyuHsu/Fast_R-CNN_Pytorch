@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="0fedf6e1-e5dc-44d1-9aeb-44b731364e1b" name="nju.fit">
+        <fileTransfer rootFolder="/home/kanchin/" accessType="SFTP" host="nju.fit" port="22" sshConfigId="4032f030-bbb8-448f-abb9-e8f3fba5d437" sshConfig="kanchin@nju.fit:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

@@ -9,6 +9,8 @@ from data.dataset import FastDataset
 from data.finetune_sample import CustomBatchSampler
 import time
 import copy
+from torch.nn import functional as F
+
 
 def load_data(data_root_dir):
     # 图像预处理
@@ -44,7 +46,6 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
         print('-' * 10)
         torch.cuda.empty_cache()
         # Each epoch has a training and validation phase
-        ammu=4
         for phase in ['train', 'val']:
             batchtime=time.time()
             #batchNormal
@@ -57,30 +58,38 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
             running_corrects = 0
             optimizer.zero_grad()
             # Iterate over data.
-            for id,(inputs, labels) in enumerate(data_loaders[phase]):
+            for id,(image, positive , neg,bbs) in enumerate(data_loaders[phase]):
                 lo=len(data_loaders[phase])
-                inputs = inputs.to(device)
-                labels = labels.to(device)
+                image=image.to(device)
+                positive=image.to(device)
+                neg=image.to(device)
+                bbs=bbs.to(device)
                 # zero the parameter gradients
                 # forward
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model(inputs)
-                    _, preds = torch.max(outputs, 1)
-                    loss = criterion(outputs, labels)
-                    loss = loss/ ammu
+                    #positive
+                    cls,t = model(image,positive)
+
+                    loss = criterion(cls,1,t,bbs)
+                    _,pred = torch.max(cls)
+                    running_corrects += torch.sum(pred == 1)
+
+                    cls,t = model(image,neg)
+
+                    loss += criterion(cls,0,t,bbs)
+                    _,pred = torch.max(cls)
+                    running_corrects += torch.sum(pred == 0)
                     # backward + optimize only if in training phase
                     if phase == 'train':
                         loss.backward()
-                        if (id+1)/ammu==0:
-                            optimizer.step()
-                            optimizer.zero_grad()
+                        optimizer.step()
+                        optimizer.zero_grad()
                 # statistics
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-                if id%10==0:
+                running_loss += loss.item() * image.size(0)
+                if id%100==0:
                     print("process:[{} / {} ".format(id,lo))
-            if phase == 'train' and (id+1)/ammu==0:
+            if phase == 'train':
                 torch.cuda.empty_cache()
                 lr_scheduler.step()
                 torch.save(model.state_dict(), 'alexnet_car.pth')
@@ -107,26 +116,31 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
     model.load_state_dict(best_model_weights)
     return model
 
-def mutyloss(outputs, labels):
+
+def smooth_loss(x):
     """
-    折页损失计算
-    :param outputs: 大小为(N, num_classes)
-    :param labels: 大小为(N)
-    :return: 损失值
+    t:回归框[4]
+    v:标注框
     """
-    num_labels = len(labels)
-    corrects = outputs[range(num_labels), labels].unsqueeze(0).T
+    if x<1:
+        return torch.sum(0.5*x^2)
+    else:
+        return torch.sum(abs(x)-0.5)
 
-    # 最大间隔
-    margin = 1.0
-    margins = outputs - corrects + margin
-    loss = torch.sum(torch.max(margins, 1)[0]) / len(labels)
-
-    # # 正则化强度
-    # reg = 1e-3
-    # loss += reg * torch.sum(weight ** 2)
-
-    return loss
+def mutyloss(p,u,t,v,lamda=1):
+    """
+    p:每一个类别的概率
+    u:正确之类别,0,1,2···
+    t:回归框
+    v:标注框
+    """
+    Lcls=F.cross_entropy(p,u)
+    t_=t[u]
+    if t_>0:
+        Lloc=smooth_loss(t_-v)
+    else:
+        Lloc=0
+    return Lcls+lamda*Lloc
 
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

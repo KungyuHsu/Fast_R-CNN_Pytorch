@@ -26,15 +26,16 @@ class FastDataset(Dataset):
             Annatations = os.path.join(root_dir, 'Annotations')
             bndbox_path = os.path.join(Annatations, sample_name+"_0" + '.csv')
             positive_path = os.path.join(Annatations, sample_name+ "_1" '.csv')
+            bb = os.path.join(Annatations, sample_name+ "_-1" '.csv')
 
             jpeg_list.append(cv2.imread(jpeg_path))
             bndboxes = np.loadtxt(bndbox_path, dtype=np.int, delimiter=' ')
             positives = np.loadtxt(positive_path, dtype=np.int, delimiter=' ')
+            bbs = np.loadtxt(bb, dtype=np.int, delimiter=' ')
 
             for positive in positives:
                 bndbox = self.get_bndbox(bndboxes, positive)
-                box_list.append({'image_id': i, 'posi': positive, 'neg': bndbox})
-
+                box_list.append({'image_id': i, 'posi': positive, 'neg': bndbox,"bbs":bbs})
         self.jpeg_list = jpeg_list
         self.box_list = box_list
 
@@ -44,7 +45,7 @@ class FastDataset(Dataset):
         image_id = box_dict['image_id']
         positive = box_dict['posi']
         neg = box_dict['neg']
-
+        bbs = box_dict['bbs']
         # 获取预测图像
         jpeg_img = self.jpeg_list[image_id]
         image = jpeg_img
@@ -52,7 +53,7 @@ class FastDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        return image, positive , neg
+        return image, positive , neg, bbs
 
     def __len__(self):
         return len(self.box_list)
