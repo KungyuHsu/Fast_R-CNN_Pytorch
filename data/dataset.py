@@ -80,27 +80,30 @@ class FastDataset(Dataset):
             target = 1
             positive_dict = self.positive_list[index]
 
-            xmin, ymin, xmax, ymax = positive_dict['rect']
+            rect = positive_dict['rect']
             image_id = positive_dict['image_id']
 
-            image = self.jpeg_images[image_id][ymin:ymax, xmin:xmax]
-            cache_dict = positive_dict
+            image = self.jpeg_images[image_id]
         else:
             # 负样本
             target = 0
             idx = index - len(self.positive_list)
             negative_dict = self.negative_list[idx]
 
-            xmin, ymin, xmax, ymax = negative_dict['rect']
-            image_id = negative_dict['image_id']
+            rect = negative_dict['rect']
 
-            image = self.jpeg_images[image_id][ymin:ymax, xmin:xmax]
-            cache_dict = negative_dict
+            image_id = negative_dict['image_id']
+            image = self.jpeg_images[image_id]
 
         if self.transform:
             image = self.transform(image)
 
-        return image, target, cache_dict
+        return image,rect, target
+    """
+    image:原图
+    rect：标注框，原论文中为 正样本IOU>0.5 负样本[0，0.5)
+    targer:正负样本标记
+    """
 
     def __len__(self) -> int:
         return len(self.positive_list) + len(self.negative_list)

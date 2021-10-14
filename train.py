@@ -5,7 +5,7 @@ import torch.nn as nn
 from Fast_RCNN import Fast_RCNN
 import torchvision.transforms as transforms
 import torch.optim as optim
-from data.finetune_dataset import CustomFinetuneDataset
+from data.dataset import FastDataset
 from data.finetune_sample import CustomBatchSampler
 
 
@@ -24,11 +24,11 @@ def load_data(data_root_dir):
     for name in ['train', 'val']:
         data_dir = os.path.join(data_root_dir, name)
         #定义Dataset
-        data_set = CustomFinetuneDataset(data_dir, transform=transform)
+        data_set = FastDataset(data_dir, transform=transform)
         #定义sampler
-        data_sampler = CustomBatchSampler(data_set.get_positive_num(), data_set.get_negative_num(), 1, 3)
+        data_sampler = CustomBatchSampler(data_set.get_positive_num(), data_set.get_negative_num(), 32, 96)
         #定义加载器
-        data_loader = DataLoader(data_set, batch_size=2, sampler=data_sampler, num_workers=8, drop_last=True)
+        data_loader = DataLoader(data_set, batch_size=128, sampler=data_sampler, num_workers=8, drop_last=True)
 
         data_loaders[name] = data_loader
         data_sizes[name] = data_sampler.__len__()
