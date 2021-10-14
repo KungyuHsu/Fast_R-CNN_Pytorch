@@ -22,8 +22,23 @@ class Fast_RCNN(nn.Module):
         X
         """
         x=self.feature(X)
-        rois=roi_pool(x,bbs,7,13/227)
+        #torch.Size([2, 3, 333, 500])????
+
+        rois=[]
+        for i,x_ in enumerate(x):
+            b=bbs[i]
+            p = torch.ones(b.shape[0]).unsqueeze(1).to("cuda")
+            b=torch.cat((p,b),1)
+            print("*********")
+            print(x_.shape)
+            print("=========")
+            print(b.shape)
+            print(b)
+            roi=roi_pool(x_,b,7,13/227)
+            rois.append(roi)
         #Tensor[K, C, output_size[0], output_size[1]]
+        rois=torch.Tensor(rois)
+        print(rois.shape)
         rois = torch.flatten(rois, 1)
         #rois = [K,256*7*7]
         x=self.FC(rois)

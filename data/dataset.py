@@ -33,11 +33,10 @@ class FastDataset(Dataset):
             positives = np.loadtxt(positive_path, dtype=np.int, delimiter=' ')
             bbs = np.loadtxt(bb, dtype=np.int, delimiter=' ')
 
-            for positive in positives:
-                bndbox = self.get_bndbox(bndboxes, positive)
-                box_list.append({'image_id': i, 'posi': positive, 'neg': bndbox,"bbs":bbs})
+            box_list.append({'image_id': i, 'posi': positives, 'neg': bndboxes,"bbs":bbs})
         self.jpeg_list = jpeg_list
         self.box_list = box_list
+        self.samples=samples
 
     def __getitem__(self, index: int):
 
@@ -49,7 +48,6 @@ class FastDataset(Dataset):
         # 获取预测图像
         jpeg_img = self.jpeg_list[image_id]
         image = jpeg_img
-
         if self.transform:
             image = self.transform(image)
 
@@ -73,52 +71,3 @@ class FastDataset(Dataset):
             scores = util.iou(positive, bndboxes)
             return bndboxes[np.argmax(scores)]
 
-
-def test():
-    """
-    创建数据集类实例
-    """
-    transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize((227, 227)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-
-    data_root_dir = '../../data/bbox_regression'
-    data_set = BBoxRegressionDataset(data_root_dir, transform=transform)
-
-    print(data_set.__len__())
-    image, target = data_set.__getitem__(10)
-    print(image.shape)
-    print(target)
-    print(target.dtype)
-
-
-def test2():
-    """
-    测试DataLoader使用
-    """
-    transform = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize((227, 227)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-
-    data_root_dir = '../../data/bbox_regression'
-    data_set = BBoxRegressionDataset(data_root_dir, transform=transform)
-    data_loader = DataLoader(data_set, batch_size=128, shuffle=True, num_workers=8)
-
-    items = next(data_loader.__iter__())
-    datas, targets = items
-    print(datas.shape)
-    print(targets.shape)
-    print(targets.dtype)
-
-
-if __name__ == '__main__':
-    test()
-    # test2()

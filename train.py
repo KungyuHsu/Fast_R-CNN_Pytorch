@@ -38,7 +38,7 @@ def load_data(data_root_dir):
 def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epochs=25, device=None):
     since = time.time()
 
-    best_model_weights = copy.deepcopy(model.state_dict())
+    # best_model_weights = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
     for epoch in range(num_epochs):
@@ -58,11 +58,11 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
             running_corrects = 0
             optimizer.zero_grad()
             # Iterate over data.
-            for id,(image, positive , neg,bbs) in enumerate(data_loaders[phase]):
+            for id,(image, positive , neg,  bbs) in enumerate(data_loaders[phase]):
                 lo=len(data_loaders[phase])
                 image=image.to(device)
-                positive=image.to(device)
-                neg=image.to(device)
+                positive=positive.to(device)
+                neg=neg.to(device)
                 bbs=bbs.to(device)
                 # zero the parameter gradients
                 # forward
@@ -103,7 +103,7 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
-                best_model_weights = copy.deepcopy(model.state_dict())
+                # best_model_weights = copy.deepcopy(model.state_dict())
 
         print()
 
@@ -145,7 +145,7 @@ def mutyloss(p,u,t,v,lamda=1):
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = Fast_RCNN()
-    data_loaders = load_data(r'.\data\funetune')
+    data_loaders = load_data(r'./data/funetune')
 
     model = model.to(device)
     # 定义交叉损失
