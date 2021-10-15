@@ -10,8 +10,7 @@ from data.finetune_sample import CustomBatchSampler
 import time
 import copy
 from torch.nn import functional as F
-
-
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def load_data(data_root_dir):
     # 图像预处理
     transform = transforms.Compose([
@@ -29,12 +28,14 @@ def load_data(data_root_dir):
         #定义Dataset
         data_set = FastDataset(data_dir, transform=transform)
         #定义加载器
-        data_loader = DataLoader(data_set, batch_size=2, num_workers=8, drop_last=True)
+        data_loader = DataLoader(data_set, batch_size=2, num_workers=4, drop_last=True,collate_fn=my_collate)
 
         data_loaders[name] = data_loader
 
     return data_loaders
-
+def gpu(input):
+    res=[i.to(device) for i in input]
+    return res
 def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epochs=25, device=None):
     since = time.time()
 
@@ -58,27 +59,29 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
             running_corrects = 0
             optimizer.zero_grad()
             # Iterate over data.
-            for id,(image, positive , neg,  bbs) in enumerate(data_loaders[phase]):
+            for id,data in enumerate(data_loaders[phase]):
+                (image, positive, neg, bbs)=data
+                image=gpu(image)
+                positive=gpu(positive)
+                neg=gpu(neg)
+                bbs=gpu(bbs)
                 lo=len(data_loaders[phase])
-                image=image.to(device)
-                positive=positive.to(device)
-                neg=neg.to(device)
-                bbs=bbs.to(device)
+                print(bbs)
                 # zero the parameter gradients
                 # forward
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
                     #positive
                     cls,t = model(image,positive)
-
-                    loss = criterion(cls,1,t,bbs)
-                    _,pred = torch.max(cls)
+                    lable=torch.ones(32,dtype=torch.int64).to("cuda")
+                    loss = criterion(cls,lable,t,bbs)
+                    pred = torch.argmax(cls,dim=1)
                     running_corrects += torch.sum(pred == 1)
 
                     cls,t = model(image,neg)
-
-                    loss += criterion(cls,0,t,bbs)
-                    _,pred = torch.max(cls)
+                    lable = torch.zeros(96,dtype=torch.int64).to("cuda")
+                    loss += criterion(cls,lable,t,bbs)
+                    pred = torch.argmax(cls,dim=1)
                     running_corrects += torch.sum(pred == 0)
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -86,15 +89,15 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
                         optimizer.step()
                         optimizer.zero_grad()
                 # statistics
-                running_loss += loss.item() * image.size(0)
+                running_loss += loss.item() * image.__len__()
                 if id%100==0:
-                    print("process:[{} / {} ".format(id,lo))
+                    print("process:[{} / {}] ".format(id,lo))
             if phase == 'train':
                 torch.cuda.empty_cache()
                 lr_scheduler.step()
                 torch.save(model.state_dict(), 'alexnet_car.pth')
             epoch_loss = running_loss / 128
-            epoch_acc = running_corrects.double() / 128
+            epoch_acc = running_corrects / 128
             torch.cuda.empty_cache()
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -104,7 +107,6 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 # best_model_weights = copy.deepcopy(model.state_dict())
-
         print()
 
     time_elapsed = time.time() - since
@@ -113,19 +115,30 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
     print('Best val Acc: {:4f}'.format(best_acc))
 
     # load best model weights
-    model.load_state_dict(best_model_weights)
     return model
 
 
-def smooth_loss(x):
+def smooth_loss(t,bbs):
     """
     t:回归框[4]
     v:标注框
     """
-    if x<1:
-        return torch.sum(0.5*x^2)
-    else:
-        return torch.sum(abs(x)-0.5)
+    bb=bbs[0]
+    x = t - bb
+    x = torch.sum(x, 1)
+    loss=x.unsqueeze(1)
+    for bb in bbs[1:]:
+        x=t-bb
+        x=torch.sum(x,1).unsqueeze(1)
+        loss=torch.cat((loss,x),1)
+    x=torch.min(loss,dim=1)[0]
+    loss=0
+    for xi in x:
+        if xi<1 and xi>-1:
+            loss+=torch.sum(0.5*xi*xi)
+        else:
+            loss+=torch.sum(abs(xi)-0.5)
+    return loss
 
 def mutyloss(p,u,t,v,lamda=1):
     """
@@ -135,15 +148,21 @@ def mutyloss(p,u,t,v,lamda=1):
     v:标注框
     """
     Lcls=F.cross_entropy(p,u)
-    t_=t[u]
-    if t_>0:
-        Lloc=smooth_loss(t_-v)
+    ti=t[u[0]]
+    if u[0]>0:
+        Lloc=smooth_loss(ti,v)
     else:
         Lloc=0
     return Lcls+lamda*Lloc
 
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
     model = Fast_RCNN()
     data_loaders = load_data(r'./data/funetune')
 
