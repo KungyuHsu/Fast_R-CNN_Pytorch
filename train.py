@@ -10,7 +10,7 @@ from data.finetune_sample import CustomBatchSampler
 import time
 import copy
 from torch.nn import functional as F
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from config import *
 def load_data(data_root_dir):
     # 图像预处理
     transform = transforms.Compose([
@@ -28,7 +28,7 @@ def load_data(data_root_dir):
         #定义Dataset
         data_set = FastDataset(data_dir, transform=transform)
         #定义加载器
-        data_loader = DataLoader(data_set, batch_size=2, num_workers=4, drop_last=True,collate_fn=my_collate)
+        data_loader = DataLoader(data_set, batch_size=1, num_workers=4, drop_last=True)
 
         data_loaders[name] = data_loader
 
@@ -59,32 +59,32 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
             running_corrects = 0
             optimizer.zero_grad()
             # Iterate over data.
+            loss=torch.Tensor([0]).to(device)
             for id,data in enumerate(data_loaders[phase]):
                 (image, positive, neg, bbs)=data
-                image=gpu(image)
-                positive=gpu(positive)
-                neg=gpu(neg)
-                bbs=gpu(bbs)
+                image=image.to(device)
+                positive=positive.to(device)
+                neg=neg.to(device)
+                bbs=bbs.to(device)
                 lo=len(data_loaders[phase])
-                print(bbs)
                 # zero the parameter gradients
                 # forward
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
                     #positive
                     cls,t = model(image,positive)
-                    lable=torch.ones(32,dtype=torch.int64).to("cuda")
-                    loss = criterion(cls,lable,t,bbs)
+                    lable=torch.ones(16,dtype=torch.int64).to(device)
+                    loss += criterion(cls,lable,t,bbs)
                     pred = torch.argmax(cls,dim=1)
                     running_corrects += torch.sum(pred == 1)
 
                     cls,t = model(image,neg)
-                    lable = torch.zeros(96,dtype=torch.int64).to("cuda")
+                    lable = torch.zeros(48,dtype=torch.int64).to(device)
                     loss += criterion(cls,lable,t,bbs)
                     pred = torch.argmax(cls,dim=1)
                     running_corrects += torch.sum(pred == 0)
                     # backward + optimize only if in training phase
-                    if phase == 'train':
+                    if phase == 'train' and (id+1)%2==0:
                         loss.backward()
                         optimizer.step()
                         optimizer.zero_grad()
@@ -93,12 +93,12 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
                 if id%100==0:
                     print("process:[{} / {}] ".format(id,lo))
             if phase == 'train':
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
                 lr_scheduler.step()
                 torch.save(model.state_dict(), 'alexnet_car.pth')
             epoch_loss = running_loss / 128
             epoch_acc = running_corrects / 128
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
             bathcend=time.time()-batchtime

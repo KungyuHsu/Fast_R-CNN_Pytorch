@@ -50,7 +50,6 @@ class FastDataset(Dataset):
         image = jpeg_img
         if self.transform:
             image = self.transform(image)
-        print(type(image))
         return image, positive , neg, bbs
 
     def __len__(self):

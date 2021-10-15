@@ -3,7 +3,7 @@ import torch.nn as nn
 import torchvision.models as models
 from torchvision.ops import roi_pool
 from selective_search import SelectiveSearch
-
+from config import *
 class Fast_RCNN(nn.Module):
 
     def __init__(self,class_num=1):
@@ -23,24 +23,12 @@ class Fast_RCNN(nn.Module):
         """
         X
         """
-        x=self.feature(X[0].unsqueeze(0))
-        F=x
-        for i in X[1:]:
-            x=self.feature(i.unsqueeze(0))
-            F=torch.cat((F,x),dim=0)
-        print(F.shape)
+        F=self.feature(X)
         #bbs:torch.Size([2,16,4])
         #x:torch.Size([2,255,333,444])
-        b = bbs[0].to("cuda")
-        p = (torch.ones(b.shape[0]) * 0).unsqueeze(1).to("cuda")
-        print(p.shape,b.shape)
+        b = bbs[0]
+        p = (torch.ones(b.shape[0]) * 0).unsqueeze(1).to()
         bb = torch.cat((p, b), 1)
-        for i in range(self.class_num):
-            i+=1
-            b = bbs[i].to("cuda")
-            p = (torch.ones(b.shape[0])*i).unsqueeze(1).to("cuda")
-            b = torch.cat((p, b), 1)
-            bb = torch.cat((bb,b),0)
 
         #b:Tensor[K, 5] 第一列为 0 or 1
         rois = roi_pool(input=F, boxes=bb, output_size=7, spatial_scale=13 / 227)
