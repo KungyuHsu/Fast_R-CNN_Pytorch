@@ -58,7 +58,6 @@ class BBoxRegressionDataset(Dataset):
             image = self.transform(image)
 
         # 计算P/G的x/y/w/h
-        target = dict()
         p_w = xmax - xmin
         p_h = ymax - ymin
         p_x = xmin + p_w / 2

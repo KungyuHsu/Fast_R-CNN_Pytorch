@@ -11,6 +11,7 @@ import time
 import copy
 from torch.nn import functional as F
 from config import *
+from matplotlib import pyplot as plt
 def load_data(data_root_dir):
     # 图像预处理
     transform = transforms.Compose([
@@ -33,15 +34,16 @@ def load_data(data_root_dir):
         data_loaders[name] = data_loader
 
     return data_loaders
-def gpu(input):
-    res=[i.to(device) for i in input]
-    return res
+
 def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epochs=25, device=None):
     since = time.time()
 
     # best_model_weights = copy.deepcopy(model.state_dict())
     best_acc = 0.0
-
+    trainloss_list=[]
+    trainacc_list=[]
+    valloss_list=[]
+    valacc_list=[]
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
@@ -54,13 +56,15 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
                 model.train()  # Set model to training mode
             else:
                 model.eval()  # Set model to evaluate mode
-
+            # input("=====start phase====")
             running_loss = 0.0
             running_corrects = 0
             optimizer.zero_grad()
             # Iterate over data.
             loss=torch.Tensor([0]).to(device)
+            # input("=====start epoch====")
             for id,data in enumerate(data_loaders[phase]):
+                # input("=====start train====")
                 (image, positive, neg, bbs)=data
                 image=image.to(device)
                 positive=positive.to(device)
@@ -88,16 +92,34 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
                         loss.backward()
                         optimizer.step()
                         optimizer.zero_grad()
+                        loss = torch.Tensor([0]).to(device)
                 # statistics
                 running_loss += loss.item() * image.__len__()
                 if id%100==0:
                     print("process:[{} / {}] ".format(id,lo))
+                    # if loss!=0:
+                    #     print("running_loss:{} ".format(loss))
+                torch.cuda.empty_cache()
+            epoch_loss = running_loss / 128
+            epoch_acc = running_corrects / 128
             if phase == 'train':
                 # torch.cuda.empty_cache()
                 lr_scheduler.step()
                 torch.save(model.state_dict(), 'alexnet_car.pth')
-            epoch_loss = running_loss / 128
-            epoch_acc = running_corrects / 128
+                trainloss_list.append(epoch_loss)
+                trainacc_list.append(epoch_acc)
+                plt.plot(trainacc_list)
+                plt.savefig("trainacc.png")
+                plt.plot(trainloss_list)
+                plt.savefig("trainloss.png")
+
+            else:
+                valacc_list.append(epoch_acc)
+                valloss_list.append(epoch_loss)
+                plt.plot(valacc_list)
+                plt.savefig("valacc.png")
+                plt.plot(valloss_list)
+                plt.savefig("valloss.png")
             # torch.cuda.empty_cache()
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -144,11 +166,11 @@ def mutyloss(p,u,t,v,lamda=1):
     """
     p:每一个类别的概率
     u:正确之类别,0,1,2···
-    t:回归框
-    v:标注框
+    t:回归框[2, 16, 4]
+    v:标注框[1, 2, 4]
     """
     Lcls=F.cross_entropy(p,u)
-    ti=t[u[0]]
+    ti=t[u[0]]#[16,4]
     if u[0]>0:
         Lloc=smooth_loss(ti,v)
     else:
@@ -156,7 +178,6 @@ def mutyloss(p,u,t,v,lamda=1):
     return Lcls+lamda*Lloc
 
 if __name__ == '__main__':
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.RandomHorizontalFlip(),
@@ -165,14 +186,13 @@ if __name__ == '__main__':
     ])
     model = Fast_RCNN()
     data_loaders = load_data(r'./data/funetune')
-
     model = model.to(device)
     # 定义交叉损失
     criterion = mutyloss
-    optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=1e-5)
     # 动态学习率，不过原论文直接定义1e-3
-    lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+    lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
     # 训练模型和保存
-    best_model = train_model(data_loaders, model, criterion, optimizer, lr_scheduler, device=device, num_epochs=25)
+    best_model = train_model(data_loaders, model, criterion, optimizer, lr_scheduler, device=device, num_epochs=100)
     # 保存最好的模型参数
-    torch.save(best_model.state_dict(), 'alexnet_car.pth')
+    torch.save(best_model.state_dict(), 'alexnet_car_BEST.pth')

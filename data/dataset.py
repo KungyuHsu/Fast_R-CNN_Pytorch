@@ -32,7 +32,9 @@ class FastDataset(Dataset):
             bndboxes = np.loadtxt(bndbox_path, dtype=np.int, delimiter=' ')
             positives = np.loadtxt(positive_path, dtype=np.int, delimiter=' ')
             bbs = np.loadtxt(bb, dtype=np.int, delimiter=' ')
-
+            if len(bbs.shape)==2:
+                #[1, n, 4]
+                bbs=bbs[0]
             box_list.append({'image_id': i, 'posi': positives, 'neg': bndboxes,"bbs":bbs})
         self.jpeg_list = jpeg_list
         self.box_list = box_list
