@@ -32,9 +32,37 @@ class FastDataset(Dataset):
             bndboxes = np.loadtxt(bndbox_path, dtype=np.int, delimiter=' ')
             positives = np.loadtxt(positive_path, dtype=np.int, delimiter=' ')
             bbs = np.loadtxt(bb, dtype=np.int, delimiter=' ')
-            if len(bbs.shape)==2:
-                #[1, n, 4]
-                bbs=bbs[0]
+            # print(len(bbs.shape))
+            if len(bbs.shape)==1:
+                #[n, 4]
+                # print(bbs)
+                bbs=np.expand_dims(bbs,0)
+                # print(bbs)
+            # print(positives.shape)#[16,4]
+            #print(bbs.shape)#[n,4]
+            bb=[]
+            for id,b in enumerate(bbs):
+                xmin, ymin, xmax, ymax = b
+                g_w = xmax - xmin
+                g_h = ymax - ymin
+                g_x = xmin + g_w / 2
+                g_y = ymin + g_h / 2
+                # positive:torch.Size([16,4])
+                lbb=[]
+                for p in positives:
+                    xmin, ymin, xmax, ymax = p
+                    p_w = xmax - xmin
+                    p_h = ymax - ymin
+                    p_x = xmin + p_w / 2
+                    p_y = ymin + p_h / 2
+                    t_x = (g_x - p_x) / p_w
+                    t_y = (g_y - p_y) / p_h
+                    t_w = np.log(g_w / p_w)
+                    t_h = np.log(g_h / p_h)
+                    lbb.append([t_x, t_y, t_w, t_h])
+                bb.append(lbb)
+            bbs=np.asarray(bb)
+            #print(bb.shape)          #(n, 16, 4)
             box_list.append({'image_id': i, 'posi': positives, 'neg': bndboxes,"bbs":bbs})
         self.jpeg_list = jpeg_list
         self.box_list = box_list

@@ -110,16 +110,20 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
                 trainacc_list.append(epoch_acc)
                 plt.plot(trainacc_list)
                 plt.savefig("trainacc.png")
+                plt.clf()
                 plt.plot(trainloss_list)
                 plt.savefig("trainloss.png")
+                plt.clf()
 
             else:
                 valacc_list.append(epoch_acc)
                 valloss_list.append(epoch_loss)
                 plt.plot(valacc_list)
                 plt.savefig("valacc.png")
+                plt.clf()
                 plt.plot(valloss_list)
                 plt.savefig("valloss.png")
+                plt.clf()
             # torch.cuda.empty_cache()
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -142,18 +146,21 @@ def train_model(data_loaders, model, criterion, optimizer, lr_scheduler, num_epo
 
 def smooth_loss(t,bbs):
     """
-    t:回归框[4]
-    v:标注框
+    t:回归框[16,4]
+    v:标注框[n, 16, 4]
     """
-    bb=bbs[0]
-    x = t - bb
-    x = torch.sum(x, 1)
-    loss=x.unsqueeze(1)
-    for bb in bbs[1:]:
-        x=t-bb
-        x=torch.sum(x,1).unsqueeze(1)
-        loss=torch.cat((loss,x),1)
-    x=torch.min(loss,dim=1)[0]
+    # print(t.shape)
+    # print(bbs.shape)
+    x = bbs-t
+    # bb=bbs[0]
+    # x = t - bb
+    loss = torch.sum(x, 2)
+    # loss=x.unsqueeze(1)
+    # for bb in bbs[1:]:
+    #     x=t-bb
+    #     x=torch.sum(x,1).unsqueeze(1)
+    #     loss=torch.cat((loss,x),1)
+    x=torch.min(loss,dim=0)[0]
     loss=0
     for xi in x:
         if xi<1 and xi>-1:
@@ -167,14 +174,16 @@ def mutyloss(p,u,t,v,lamda=1):
     p:每一个类别的概率
     u:正确之类别,0,1,2···
     t:回归框[2, 16, 4]
-    v:标注框[1, 2, 4]
+    v:标注框[1, 2, 4] [4,]
+    v:     (n, 16, 4)
     """
     Lcls=F.cross_entropy(p,u)
     ti=t[u[0]]#[16,4]
     if u[0]>0:
-        Lloc=smooth_loss(ti,v)
+        Lloc=smooth_loss(ti,v[0])
     else:
         Lloc=0
+    # print(Lcls,Lloc)
     return Lcls+lamda*Lloc
 
 if __name__ == '__main__':

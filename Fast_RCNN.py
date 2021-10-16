@@ -23,8 +23,8 @@ class Fast_RCNN(nn.Module):
         X
         """
         X=self.feature(X)
-        #bbs:torch.Size([2,16,4])
-        #x:torch.Size([2,255,333,444])
+        #bbs:torch.Size([n,16,4])
+        #x:torch.Size([n,255,333,444])
         b = bbs[0]
         p = (torch.ones(b.shape[0]) * 0).unsqueeze(1).to(device)
         bb = torch.cat((p, b), 1)
